@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Root stack - Orchestrates VPC, Network, Security, and Compute modules'
+
+Parameters:
+  AllowedIP:
+    Type: String
+    Description: IP address for SSH access (e.g., 203.0.113.10/32)
+    AllowedPattern: ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/32$
+    ConstraintDescription: Must be a valid IP address with /32 CIDR (e.g., 203.0.113.10/32)
+  
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair for SSH access
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+  
+  S3BucketName:
+    Type: String
+    Description: S3 bucket containing the nested stack templates
+    Default: my-cloudformation-templates
+
+Resources:
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/vpc-module.yaml
+      TimeoutInMinutes: 20
+
+  NetworkStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/network-module.yaml
+      Parameters:
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        PublicSubnetId: !GetAtt VPCStack.Outputs.PublicSubnetId
+        PrivateSubnetId: !GetAtt VPCStack.Outputs.PrivateSubnetId
+      TimeoutInMinutes: 20
+    DependsOn: VPCStack
+
+  SecurityStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/security-module.yaml
+      Parameters:
+        VpcId: !GetAtt VPCStack.Outputs.VpcId
+        AllowedIP: !Ref AllowedIP
+      TimeoutInMinutes: 20
+    DependsOn: VPCStack
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: modules/compute-module.yaml
+      Parameters:
+        PublicSubnetId: !GetAtt VPCStack.Outputs.PublicSubnetId
+        PrivateSubnetId: !GetAtt VPCStack.Outputs.PrivateSubnetId
+        PublicSecurityGroupId: !GetAtt SecurityStack.Outputs.PublicSecurityGroupId
+        PrivateSecurityGroupId: !GetAtt SecurityStack.Outputs.PrivateSecurityGroupId
+        KeyName: !Ref KeyName
+      TimeoutInMinutes: 20
+    DependsOn:
+      - NetworkStack
+      - SecurityStack
+
+Outputs:
+  VpcId:
+    Description: ID of the VPC
+    Value: !GetAtt VPCStack.Outputs.VpcId
+  
+  PublicSubnetId:
+    Description: ID of the Public Subnet
+    Value: !GetAtt VPCStack.Outputs.PublicSubnetId
+  
+  PrivateSubnetId:
+    Description: ID of the Private Subnet
+    Value: !GetAtt VPCStack.Outputs.PrivateSubnetId
+  
+  PublicEC2PublicIP:
+    Description: Public IP of the Public EC2 instance
+    Value: !GetAtt ComputeStack.Outputs.PublicEC2PublicIP
+  
+  PrivateEC2PrivateIP:
+    Description: Private IP of the Private EC2 instance
+    Value: !GetAtt ComputeStack.Outputs.PrivateEC2PrivateIP

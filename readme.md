@@ -1,189 +1,174 @@
-## Kubernetes 3-Tier Web App Deployment 🚀
-A full-stack deployment project for production-grade Kubernetes clusters. This setup features HAProxy load balancing, a GitOps-inspired CI/CD pipeline, and integrated monitoring with Prometheus and Grafana — all automated for scalability, security, and observability.
+# AWS CloudFormation CI/CD Pipeline
 
-Since the project deadline wasn’t too tight, Group 1 decided to expand the lab by adding HAProxy, monitoring, and observability tools to gain deeper hands-on experience and simulate a more realistic production environment.
+This repository contains an Infrastructure as Code (IaC) solution using AWS CloudFormation with a complete CI/CD pipeline. The pipeline automatically validates and deploys infrastructure changes when templates are updated.
 
----
-## Authors
+## Architecture
 
-| Name                     | Student ID |
-| ------------------------ | ---------- |
-| **Phuc Thuong Nguyen**   | 22521134   |
-| **Cuong Luu Quoc**       | 22520173   |
-| **Tien Dat Nguyen Pham** | 22520217   |
+### Infrastructure Components (Nested Stack)
+- VPC with public and private subnets
+- Network components (Internet Gateway, NAT Gateway, Route Tables)
+- Security Groups for EC2 instances
+- EC2 instances in public and private subnets
 
+### CI/CD Pipeline Components
+- CodeCommit: Source control
+- CodeBuild: Template validation (cfn-lint + taskcat)
+- CloudFormation: Infrastructure deployment
 
-## ✨ Features
-🖥️ Three-Tier Application: Deployment of frontend, backend, and database components
+## Prerequisites
 
-⚡ HAProxy Load Balancer: Layer 4 TCP load balancing across Kubernetes control-plane nodes
+1. AWS CLI installed and configured
+2. An AWS account with appropriate permissions
+3. Git installed locally
+4. An EC2 key pair in your AWS account
 
-🔗 Kubernetes Cluster with Kubespray: High-availability Kubernetes installation
+## Setup Instructions
 
-🔧 CI/CD Pipeline: Jenkins-driven pipeline for building and deploying applications automatically
-
-📊 Monitoring: Prometheus and Grafana stack for system and application metrics
-
-🔐 Secure Secrets: Kubernetes Secrets to handle sensitive credentials
-
-📈 Auto-Scaling Ready: Horizontal scaling configurations available
-
-## 🚀 Getting Started
-### Prerequisites
-- One or more servers (VMs or bare-metal) with:
-
-- Ubuntu 20.04+ or CentOS 7+
-
-- Public/private IP addresses
-
-- Python 3 and Ansible installed (for Kubespray)
-
-- Jenkins installed and configured
-
-- HAProxy installed on a separate node or master node
-
-- kubectl configured locally
-
-### Installation Steps
-
-#### Clone Kubespray:
-```bash
-git clone https://github.com/kubernetes-sigs/kubespray.git
-cd kubespray
-pip install -r requirements.txt
-cp -rfp inventory/sample inventory/three-tier
-```
-
-Edit your inventory/three-tier/hosts.yaml with your server IPs.
-
-Run Kubespray playbooks:
+### 1. Create CodeCommit Repository
 
 ```bash
-ansible-playbook -i inventory/three-tier/hosts.yaml --become --become-user=root cluster.yml
+# Create the repository
+aws codecommit create-repository --repository-name infrastructure-repo --repository-description "Infrastructure as Code Repository"
+
+# Note down the repository URL from the output
 ```
 
-#### Configure HAProxy (Layer 4 Load Balancer):
-
-Example /etc/haproxy/haproxy.cfg snippet:
+### 2. Configure Git Credentials for CodeCommit
 
 ```bash
-frontend k8s-api
-    bind *:6443
-    mode tcp
-    default_backend k8s-masters
-
-backend k8s-masters
-    mode tcp
-    balance roundrobin
-    server master1 192.168.1.10:6443 check
-    server master2 192.168.1.11:6443 check
-    server master3 192.168.1.12:6443 check
+# Generate HTTPS Git credentials in AWS Console:
+# IAM -> Users -> Your User -> Security Credentials -> HTTPS Git credentials for AWS CodeCommit
 ```
+
+### 3. Clone and Set Up Repository
 
 ```bash
-systemctl restart haproxy
+# Clone the repository
+git clone <CODECOMMIT_REPO_URL>
+cd infrastructure-repo
+
+# Copy your infrastructure files to the repository
+mkdir Task2
+cp -r /path/to/your/templates/* Task2/
+
+# Initial commit
+git add .
+git commit -m "Initial commit with infrastructure templates"
+git push
 ```
 
-#### Set Up Jenkins CICD Pipeline:
-
-Create a Jenkins pipeline using a Jenkinsfile that:
-
-- Pulls the source code from GitHub
-
-- Builds Docker images
-
-- Pushes images to a container registry
-
-- Applies Kubernetes manifests using kubectl apply
-
-#### Deploy Monitoring Stack:
-
-Install Prometheus and Grafana via Helm:
+### 4. Deploy the Pipeline
 
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-helm install monitoring prometheus-community/kube-prometheus-stack
+# Get your current IP address for the AllowedIP parameter
+curl https://checkip.amazonaws.com
+
+# Deploy the pipeline stack
+aws cloudformation create-stack \
+  --stack-name infrastructure-pipeline \
+  --template-body file://Task2/pipeline-stack.yaml \
+  --parameters \
+    ParameterKey=AllowedIP,ParameterValue=$(curl -s https://checkip.amazonaws.com)/32 \
+    ParameterKey=KeyName,ParameterValue=your-key-pair-name \
+    ParameterKey=RepositoryName,ParameterValue=infrastructure-repo \
+    ParameterKey=BranchName,ParameterValue=main \
+  --capabilities CAPABILITY_IAM
+
+# Monitor the stack creation
+aws cloudformation describe-stacks --stack-name infrastructure-pipeline
 ```
 
-Access Grafana:
+## Pipeline Workflow
 
+1. **Source Stage**:
+   - Monitors changes in the `Task2` folder of the CodeCommit repository
+   - Triggers pipeline when changes are pushed
+
+2. **Validation Stage**:
+   - Runs `cfn-lint` on all templates
+   - Executes `taskcat` tests
+   - Fails the pipeline if validation errors are found
+
+3. **Deploy Stage**:
+   - Deploys the nested stack using CloudFormation
+   - Creates/updates all infrastructure components
+
+## Making Changes
+
+1. Clone the repository if you haven't already:
 ```bash
-kubectl port-forward svc/monitoring-grafana 3000:80
+git clone <CODECOMMIT_REPO_URL>
+cd infrastructure-repo
 ```
 
-Default credentials: admin/prom-operator
+2. Make changes to templates in the `Task2` folder:
+   - `root-stack.yaml`: Main template
+   - `modules/*.yaml`: Individual component templates
 
-#### Deploy Your Three-Tier Application:
-
-Apply your Kubernetes manifests:
-
+3. Commit and push changes:
 ```bash
-kubectl apply -f Kubernetes-Manifests-file/
+git add .
+git commit -m "Description of changes"
+git push
 ```
 
-## 📋 Verification
-#### Jenkins Jobs: Check build and deploy success
+4. The pipeline will automatically:
+   - Detect the changes
+   - Validate the templates
+   - Deploy the updates if validation passes
 
-Pods Status:
+## Monitoring
 
+### Pipeline Status
 ```bash
-kubectl get pods --all-namespaces
+# Get pipeline execution status
+aws codepipeline get-pipeline-state --name infrastructure-pipeline
+
+# Get CloudFormation stack status
+aws cloudformation describe-stacks --stack-name infrastructure-stack
 ```
 
-Service Status
+### Logs and Troubleshooting
+- Pipeline execution details: AWS Console -> CodePipeline
+- Build logs: AWS Console -> CodeBuild
+- Deployment logs: AWS Console -> CloudFormation
 
+## Cleanup
+
+To delete all resources:
+
+1. Delete the infrastructure stack:
 ```bash
-kubectl get svc --all-namespaces
+aws cloudformation delete-stack --stack-name infrastructure-stack
 ```
 
-Grafana Dashboards: Metrics from Prometheus visible
-
-HAProxy Stats: (optional) monitor traffic load
-
-## 🛠️ Uninstallation
-Remove Kubernetes cluster using Kubespray:
-
+2. Delete the pipeline stack:
 ```bash
-ansible-playbook -i inventory/three-tier/hosts.yaml --become --become-user=root reset.yml
+aws cloudformation delete-stack --stack-name infrastructure-pipeline
 ```
 
-Tear down HAProxy manually.
-
-🔧 Troubleshooting
-
-## Issue	Solution
-- kubectl connection issues	Verify HAProxy load balancing and API server health
-- Prometheus missing targets	Check Prometheus service discovery settings
-- Jenkins build failure	Check credentials, Docker daemon, and kubeconfig
-- 
-## 📝 Logs
-#### Jenkins Pipeline logs: Jenkins Web UI → Builds
-
-Kubernetes Pod logs:
-
+3. Delete the CodeCommit repository:
 ```bash
-kubectl logs <pod-name> -n <namespace>
+aws codecommit delete-repository --repository-name infrastructure-repo
 ```
 
-Prometheus and Grafana logs: Kubernetes logging
+## Security Notes
 
-## Images
+- The pipeline uses IAM roles with necessary permissions
+- EC2 instances are secured with security groups
+- SSH access is restricted to your IP address
+- Private instances are only accessible through the public instance
 
-![1  EC2](https://github.com/user-attachments/assets/2c434dde-542f-4a5a-96ac-f52f018e3ca2)
+## Template Structure
 
-![2  pipelinee](https://github.com/user-attachments/assets/8d1b8649-8649-40c8-8552-71c8768c50d5)
-
-![3  be pipeline flow](https://github.com/user-attachments/assets/233d316a-80f3-466d-84c3-d38deeda7bba)
-
-![4  deployment pipeline flow](https://github.com/user-attachments/assets/2ead46ff-f52b-4c42-b5b3-1c18b04d6ce9)
-
-![5  sonarqube](https://github.com/user-attachments/assets/0acf388d-26b5-4583-a135-ee753e369fad)
-
-![6  K8s monittor](https://github.com/user-attachments/assets/f62a5c07-6c16-42b6-bdd5-512708482378)
-
-![7  jenkins monitoring](https://github.com/user-attachments/assets/3b1d5531-4cc7-4aa5-85b6-4b202d960ae3)
-
-
-## Happy Deploying! 🚀
-For support, feel free to raise an issue or contact the project maintainers.
+```
+Task2/
+├── pipeline-stack.yaml     # CI/CD pipeline definition
+├── root-stack.yaml        # Main infrastructure template
+├── .taskcat.yml          # Taskcat configuration
+└── modules/
+    ├── vpc-module.yaml
+    ├── network-module.yaml
+    ├── security-module.yaml
+    └── compute-module.yaml
+``` 

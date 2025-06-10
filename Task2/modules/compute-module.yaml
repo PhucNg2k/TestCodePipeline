@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Compute Module - Creates EC2 instances in public and private subnets'
+
+Parameters:
+  PublicSubnetId:
+    Type: String
+    Description: ID of the Public Subnet
+  PrivateSubnetId:
+    Type: String
+    Description: ID of the Private Subnet
+  PublicSecurityGroupId:
+    Type: String
+    Description: ID of the security group for public instance
+  PrivateSecurityGroupId:
+    Type: String
+    Description: ID of the security group for private instance
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair for SSH access
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0c55b159cbfafe1f0
+    us-east-2:
+      AMI: ami-0568773882d492fc8
+    us-west-1:
+      AMI: ami-0b2ca94b5b49e0132
+    us-west-2:
+      AMI: ami-0c09c7eb16d3e8e70
+    eu-west-1:
+      AMI: ami-0fc970315c2d38f01
+    ap-southeast-1:
+      AMI: ami-0d058fe428540cd89
+    ap-southeast-2:
+      AMI: ami-0f6a1a6507c55c9a8
+
+Resources:
+  PublicEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SubnetId: !Ref PublicSubnetId
+      SecurityGroupIds:
+        - !Ref PublicSecurityGroupId
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      Tags:
+        - Key: Name
+          Value: public-ec2
+
+  PrivateEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SubnetId: !Ref PrivateSubnetId
+      SecurityGroupIds:
+        - !Ref PrivateSecurityGroupId
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      Tags:
+        - Key: Name
+          Value: private-ec2
+
+Outputs:
+  PublicEC2Id:
+    Description: ID of the Public EC2 instance
+    Value: !Ref PublicEC2
+  PublicEC2PublicIP:
+    Description: Public IP of the Public EC2 instance
+    Value: !GetAtt PublicEC2.PublicIp
+  PrivateEC2Id:
+    Description: ID of the Private EC2 instance
+    Value: !Ref PrivateEC2
+  PrivateEC2PrivateIP:
+    Description: Private IP of the Private EC2 instance
+    Value: !GetAtt PrivateEC2.PrivateIp

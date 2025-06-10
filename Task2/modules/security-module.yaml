@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Security Module - Creates security groups for EC2 instances'
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: ID of the VPC
+  AllowedIP:
+    Type: String
+    Description: IP address for SSH access (e.g., 203.0.113.10/32)
+
+Resources:
+  PublicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for public EC2 instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedIP
+      Tags:
+        - Key: Name
+          Value: public-secgroup
+
+  PrivateSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for private EC2 instance
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref PublicSecurityGroup
+      Tags:
+        - Key: Name
+          Value: private-secgroup
+
+Outputs:
+  PublicSecurityGroupId:
+    Description: ID of the security group for public instance
+    Value: !Ref PublicSecurityGroup
+  PrivateSecurityGroupId:
+    Description: ID of the security group for private instance
+    Value: !Ref PrivateSecurityGroup

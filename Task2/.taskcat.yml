@@ -1,0 +1,13 @@
+project:
+  name: infrastructure-test
+  regions:
+    - ap-southeast-2  
+  parameters:
+    AllowedIP: 0.0.0.0/32  # This will be overridden by the pipeline
+    KeyName: dummy-key     # This will be overridden by the pipeline
+
+tests:
+  infrastructure-test:
+    template: ./root-stack.yaml
+    regions:
+      - ap-southeast-2 
