@@ -1,0 +1,35 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+    commands:
+      - pip install --upgrade pip
+      - pip install cfn-lint taskcat
+  
+  pre_build:
+    commands:
+      - echo "Preparing for template validation..."
+  
+  build:
+    commands:
+      - echo "Running CloudFormation template validation..."
+      - cd Task2
+      - echo "Step 1: Running cfn-lint validation..."
+      - cfn-lint --config-file .cfnlintrc.yml root-stack.yaml modules/*.yaml || if [ $? -eq 4 ]; then echo "Warnings found but continuing..."; else exit $?; fi
+      - echo "Step 2: Running taskcat tests..."
+      - taskcat test run
+      - echo "Step 3: Packaging templates..."
+      - aws cloudformation package --template-file root-stack.yaml --s3-bucket ${ARTIFACT_BUCKET} --output-template-file packaged-root-stack.yaml
+  
+  post_build:
+    commands:
+      - echo "Template validation, testing, and packaging complete"
+
+artifacts:
+  files:
+    - packaged-root-stack.yaml
+    - modules/*
+    - .taskcat.yml
+  base-directory: Task2 

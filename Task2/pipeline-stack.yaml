@@ -2,15 +2,24 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CI/CD Pipeline for CloudFormation Nested Stack Infrastructure'
 
 Parameters:
-  RepositoryName:
+  GitHubOwner:
     Type: String
-    Description: Name of the CodeCommit repository
+    Description: GitHub repository owner (username or organization)
+  
+  GitHubRepo:
+    Type: String
+    Description: Name of the GitHub repository
     Default: infrastructure-repo
   
-  BranchName:
+  GitHubBranch:
     Type: String
     Description: Name of the branch to monitor for changes
     Default: main
+
+  GitHubToken:
+    Type: String
+    Description: GitHub personal access token
+    NoEcho: true
 
   AllowedIP:
     Type: String
@@ -50,27 +59,7 @@ Resources:
         PrivilegedMode: false
       Source:
         Type: CODEPIPELINE
-        BuildSpec: |
-          version: 0.2
-          phases:
-            install:
-              runtime-versions:
-                python: 3.9
-              commands:
-                - pip install cfn-lint taskcat
-            build:
-              commands:
-                - echo "Running CloudFormation template validation..."
-                - cd Task2
-                - cfn-lint root-stack.yaml modules/*.yaml
-                - echo "Running taskcat tests..."
-                - taskcat test run
-          artifacts:
-            files:
-              - Task2/**/*
-              - taskcat_outputs/**/*
-            base-directory: Task2
-            discard-paths: no
+        BuildSpec: buildspec.yml
 
   # Pipeline
   Pipeline:
@@ -88,14 +77,15 @@ Resources:
             - Name: Source
               ActionTypeId:
                 Category: Source
-                Owner: AWS
-                Provider: CodeCommit
+                Owner: ThirdParty
+                Provider: GitHub
                 Version: '1'
               Configuration:
-                RepositoryName: !Ref RepositoryName
-                BranchName: !Ref BranchName
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
                 PollForSourceChanges: true
-                S3Prefix: Task2/
               OutputArtifacts:
                 - Name: SourceCode
               RunOrder: 1
@@ -130,7 +120,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationServiceRole.Arn
                 StackName: infrastructure-stack
-                TemplatePath: SourceCode::Task2/root-stack.yaml
+                TemplatePath: ValidatedTemplates::packaged-root-stack.yaml
                 Capabilities: CAPABILITY_IAM
                 ParameterOverrides: !Sub |
                   {
@@ -138,7 +128,7 @@ Resources:
                     "KeyName": "${KeyName}"
                   }
               InputArtifacts:
-                - Name: SourceCode
+                - Name: ValidatedTemplates
               RunOrder: 1
 
   # IAM Roles
@@ -153,9 +143,7 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
-        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess
 
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
@@ -168,11 +156,7 @@ Resources:
               Service: codepipeline.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess
-        - arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess
-        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
-        - arn:aws:iam::aws:policy/AmazonS3FullAccess
-        - arn:aws:iam::aws:policy/AWSCodeCommitFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess
 
   CloudFormationServiceRole:
     Type: AWS::IAM::Role
@@ -185,7 +169,7 @@ Resources:
               Service: cloudformation.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AdministratorAccess  # Note: In production, you should restrict this to only necessary permissions
+        - arn:aws:iam::aws:policy/AdministratorAccess
 
 Outputs:
   PipelineURL:
